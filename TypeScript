@@ -1,0 +1,262 @@
+/**
+ * Bank Account System
+ * Implements: Create Account, Deposit, Withdraw, Transfer
+ * Fraud rules: insufficient funds, rapid transactions, spending spikes
+ */
+
+const RAPID_WINDOW_SECONDS = 10;
+const RAPID_MAX_ATTEMPTS = 3;
+const SPIKE_MULTIPLIER = 5;
+
+type TransactionType = "WITHDRAWAL" | "TRANSFER";
+type ResultStatus = "PASS" | "FAIL";
+
+interface AttemptRecord {
+  amount: number;
+  type: TransactionType;
+  timestamp: number;
+  status: ResultStatus;
+}
+
+interface Result {
+  status: ResultStatus;
+  message: string;
+  balance?: number;
+  accountNumber?: number;
+}
+
+class Account {
+  readonly accountNumber: number;
+  ownerName: string;
+  balance: number;
+  attemptHistory: AttemptRecord[] = [];
+  totalOutgoingTransactions = 0;
+  totalOutgoingAmount = 0;
+
+  constructor(accountNumber: number, name: string, openingBalance: number) {
+    this.accountNumber = accountNumber;
+    this.ownerName = name;
+    this.balance = openingBalance;
+  }
+
+  getAverageOutgoingAmount(): number {
+    if (this.totalOutgoingTransactions === 0) return 0;
+    return this.totalOutgoingAmount / this.totalOutgoingTransactions;
+  }
+}
+
+// In-memory store of accounts, keyed by account number
+const accounts = new Map<number, Account>();
+let nextAccountNumber = 1000;
+
+// ---------- Create Account ----------
+
+function createAccount(name: string, openingBalance: number): Result {
+  if (openingBalance < 0) {
+    return { status: "FAIL", message: "Opening balance cannot be negative." };
+  }
+
+  const account = new Account(nextAccountNumber++, name, openingBalance);
+  accounts.set(account.accountNumber, account);
+
+  return {
+    status: "PASS",
+    message: "Account created successfully.",
+    accountNumber: account.accountNumber,
+  };
+}
+
+// ---------- Check Transaction Rules ----------
+
+function checkTransactionRules(
+  account: Account,
+  amount: number,
+  type: TransactionType,
+  currentTimestamp: number
+): Result {
+  // Rule 1: insufficient funds
+  if (amount > account.balance) {
+    return { status: "FAIL", message: "Insufficient funds." };
+  }
+
+  // Rule 2: rapid transactions (counts all attempts, pass or fail)
+  const recentCount = account.attemptHistory.filter((entry) => {
+    const isOutgoing = entry.type === "WITHDRAWAL" || entry.type === "TRANSFER";
+    const withinWindow = currentTimestamp - entry.timestamp <= RAPID_WINDOW_SECONDS;
+    return isOutgoing && withinWindow;
+  }).length;
+
+  if (recentCount >= RAPID_MAX_ATTEMPTS) {
+    return { status: "FAIL", message: "Too many transactions in a short period." };
+  }
+
+  // Rule 3: unusual spending spike
+  if (account.totalOutgoingTransactions > 0) {
+    const average = account.getAverageOutgoingAmount();
+    const maxAllowed = SPIKE_MULTIPLIER * average;
+
+    if (amount > maxAllowed) {
+      return {
+        status: "FAIL",
+        message: "Transaction blocked because the amount is unusually large.",
+      };
+    }
+  }
+
+  return { status: "PASS", message: "OK" };
+}
+
+// ---------- Record Attempt / Update Account Information ----------
+
+function recordAttempt(
+  account: Account,
+  amount: number,
+  type: TransactionType,
+  currentTimestamp: number,
+  status: ResultStatus
+): void {
+  account.attemptHistory.push({ amount, type, timestamp: currentTimestamp, status });
+
+  // keep only entries inside the rate-limit window
+  account.attemptHistory = account.attemptHistory.filter(
+    (entry) => currentTimestamp - entry.timestamp <= RAPID_WINDOW_SECONDS
+  );
+}
+
+function updateAccountInformation(
+  account: Account,
+  amount: number,
+  type: TransactionType
+): void {
+  account.totalOutgoingTransactions += 1;
+  account.totalOutgoingAmount += amount;
+}
+
+// ---------- Deposit ----------
+
+function deposit(accountNumber: number, amount: number): Result {
+  const account = accounts.get(accountNumber);
+  if (!account) {
+    return { status: "FAIL", message: "Account not found." };
+  }
+
+  if (amount <= 0) {
+    return { status: "FAIL", message: "Deposit amount must be greater than 0." };
+  }
+
+  account.balance += amount;
+
+  return { status: "PASS", message: "Deposit successful.", balance: account.balance };
+}
+
+// ---------- Withdraw ----------
+
+function withdraw(accountNumber: number, amount: number, currentTimestamp: number): Result {
+  const account = accounts.get(accountNumber);
+  if (!account) {
+    return { status: "FAIL", message: "Account not found." };
+  }
+
+  if (amount <= 0) {
+    return { status: "FAIL", message: "Withdrawal amount must be greater than 0." };
+  }
+
+  const ruleResult = checkTransactionRules(account, amount, "WITHDRAWAL", currentTimestamp);
+  recordAttempt(account, amount, "WITHDRAWAL", currentTimestamp, ruleResult.status);
+
+  if (ruleResult.status !== "PASS") {
+    return ruleResult;
+  }
+
+  account.balance -= amount;
+  updateAccountInformation(account, amount, "WITHDRAWAL");
+
+  return { status: "PASS", message: "Withdrawal successful.", balance: account.balance };
+}
+
+// ---------- Transfer ----------
+
+function transfer(
+  senderAccountNumber: number,
+  recipientAccountNumber: number,
+  amount: number,
+  currentTimestamp: number
+): Result {
+  const sender = accounts.get(senderAccountNumber);
+  if (!sender) {
+    return { status: "FAIL", message: "Sender account not found." };
+  }
+
+  const recipient = accounts.get(recipientAccountNumber);
+  if (!recipient) {
+    return { status: "FAIL", message: "Recipient account not found." };
+  }
+
+  if (senderAccountNumber === recipientAccountNumber) {
+    return { status: "FAIL", message: "Cannot transfer to the same account." };
+  }
+
+  if (amount <= 0) {
+    return { status: "FAIL", message: "Transfer amount must be greater than 0." };
+  }
+
+  const ruleResult = checkTransactionRules(sender, amount, "TRANSFER", currentTimestamp);
+  recordAttempt(sender, amount, "TRANSFER", currentTimestamp, ruleResult.status);
+
+  if (ruleResult.status !== "PASS") {
+    return ruleResult;
+  }
+
+  sender.balance -= amount;
+  recipient.balance += amount;
+  updateAccountInformation(sender, amount, "TRANSFER");
+
+  return { status: "PASS", message: "Transfer successful.", balance: sender.balance };
+}
+
+// ---------- Demo ----------
+
+function demo(): void {
+  const alice = createAccount("Alice", 500);
+  const bob = createAccount("Bob", 100);
+
+  console.log(alice);
+  console.log(bob);
+
+  const aliceAccountNumber = alice.accountNumber as number;
+  const bobAccountNumber = bob.accountNumber as number;
+
+  let t = 0;
+  console.log(deposit(aliceAccountNumber, 200)); // balance 700
+
+  console.log(withdraw(aliceAccountNumber, 50, (t += 1))); // PASS
+  console.log(withdraw(aliceAccountNumber, 50, (t += 1))); // PASS
+  console.log(withdraw(aliceAccountNumber, 50, (t += 1))); // PASS
+  console.log(withdraw(aliceAccountNumber, 10, (t += 1))); // FAIL: too many in 10s
+
+  console.log(
+    transfer(aliceAccountNumber, bobAccountNumber, 1000, (t += 20)) // FAIL: insufficient funds
+  );
+
+  console.log(
+    transfer(aliceAccountNumber, bobAccountNumber, 500, (t += 1)) // FAIL: spike (>5x avg ~50)
+  );
+
+  console.log(transfer(aliceAccountNumber, aliceAccountNumber, 10, t)); // FAIL: same account
+}
+
+export {
+  Account,
+  Result,
+  TransactionType,
+  createAccount,
+  deposit,
+  withdraw,
+  transfer,
+  checkTransactionRules,
+  updateAccountInformation,
+};
+
+if (require.main === module) {
+  demo();
+}
