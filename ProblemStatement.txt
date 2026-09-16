@@ -1,0 +1,72 @@
+Problem Statement
+
+The system manages bank accounts for users. It processes deposits, 
+withdrawals, and transfers between accounts, while automatically 
+detecting and blocking suspicious or fraudulent activity.
+
+Rules
+
+1. Insufficient Funds
+   A withdrawal or transfer cannot exceed the account's current balance.
+
+2. Rapid Transactions
+   If an account has 3 or more withdrawal or transfer attempts within
+   the last 10 seconds, the new attempt is blocked. This applies to
+   BOTH withdrawals and transfers — a transfer is not a loophole
+   around the withdrawal rate limit.
+
+3. Unusual Spending Spike
+   The system tracks each account's average outgoing transaction size,
+   based on its successful withdrawals and transfers. If a new
+   withdrawal or transfer is more than 5 times that average, it is
+   blocked. Accounts with no prior successful outgoing transactions
+   are exempt, since there is no average to compare against yet.
+
+Requirements
+
+1. Account Creation
+   The system must be able to create a new account with an owner name
+   and an opening balance. The opening balance cannot be negative.
+   Each account is given a unique account number and starts with an
+   empty transaction history.
+
+2. Deposit
+   A deposit must be greater than 0. On success, it is added to the
+   account balance. Deposits are not subject to any of the fraud
+   rules above.
+
+3. Withdrawal
+   A withdrawal must be greater than 0 and must pass all three rules
+   above before the balance is changed. On success, the amount is
+   subtracted from the balance and the account's outgoing transaction
+   stats are updated.
+
+4. Transfer
+   A transfer requires both the sender and recipient accounts to
+   exist and to be different accounts. The transfer amount must be
+   greater than 0 and must pass all three rules above (applied to the
+   sender) before either balance changes. On success, the amount is
+   subtracted from the sender's balance and added to the recipient's
+   balance in the same operation — if the credit side cannot complete,
+   the debit must not happen either.
+
+5. Rule Checking (shared logic)
+   The insufficient-funds check, rapid-transaction check, and
+   spending-spike check must be implemented once and reused by both
+   Withdrawal and Transfer, rather than duplicated in each. This
+   guarantees both operations are always checked against the same
+   rules, in the same order, with no drift between them.
+
+6. Recording Transactions
+   Every withdrawal or transfer attempt — whether it passes or is
+   blocked — should be recorded, so the system has an accurate record
+   for rate-limiting and for later review. Only successful outgoing
+   transactions count toward the running average used in Rule 3.
+
+7. Account Data Tracked
+   Each account stores: account number, owner name, balance, a short
+   history of recent transaction attempts (for the rate-limit check),
+   total number of successful outgoing transactions, and total amount
+   of successful outgoing transactions (average is calculated from
+   these two numbers, not stored separately).
+
