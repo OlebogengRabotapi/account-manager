@@ -1,0 +1,152 @@
+Bank Account System – Pseudocode
+
+Create Account
+START
+    Ask the user for their name.
+    Ask the user for their opening balance.
+    IF opening balance is less than 0 THEN
+        Display "Opening balance cannot be negative."
+    ELSE
+        Create a new account.
+        Give the account a unique account number.
+        Set the account balance to the opening balance.
+        Set the transaction history to empty.
+        Save the account.
+        Display "Account created successfully."
+    END IF
+END
+
+
+Check Transaction Rules
+START
+    Receive the account, the amount, the transaction type,
+    and the current time.
+
+    IF amount is greater than the account balance THEN
+        Return "FAIL: Insufficient funds."
+    END IF
+
+    Count how many withdrawal or transfer attempts this account
+    has made in the last 10 seconds (successful or not).
+
+    IF that count is 3 or more THEN
+        Return "FAIL: Too many transactions in a short period."
+    END IF
+
+    IF the account has previous successful outgoing transactions THEN
+        Calculate the average outgoing transaction amount.
+        IF amount is greater than 5 times that average THEN
+            Return "FAIL: Transaction blocked because the amount is
+            unusually large."
+        END IF
+    END IF
+
+    Return "PASS."
+END
+
+
+Update Account Information
+START
+    Receive the account, the amount, and the transaction type.
+
+    IF the transaction type is not "WITHDRAWAL" and not "TRANSFER" THEN
+        Stop. Nothing to update.
+    END IF
+
+    Add the amount to the account's total outgoing transactions count.
+    Add the amount to the account's total outgoing transaction amount.
+    Recalculate the account's average outgoing transaction amount.
+END
+
+
+Deposit Money
+START
+    Ask for the account number.
+    Find the account.
+    IF the account does not exist THEN
+        Display "Account not found."
+    ELSE
+        Ask for the deposit amount.
+        IF deposit amount is less than or equal to 0 THEN
+            Display "Deposit amount must be greater than 0."
+        ELSE
+            Add the deposit amount to the account balance.
+            Display "Deposit successful."
+            Display the new balance.
+        END IF
+    END IF
+END
+
+
+Withdraw Money
+START
+    Ask for the account number.
+    Find the account.
+    IF the account does not exist THEN
+        Display "Account not found."
+    ELSE
+        Ask for the withdrawal amount and the current time.
+        IF withdrawal amount is less than or equal to 0 THEN
+            Display "Withdrawal amount must be greater than 0."
+        ELSE
+            Call Check Transaction Rules with the account, the
+            withdrawal amount, "WITHDRAWAL", and the current time.
+
+            Record this attempt in the account's history, along
+            with whether it passed or failed.
+
+            IF the result is not "PASS" THEN
+                Display the result.
+            ELSE
+                Subtract the withdrawal amount from the balance.
+                Call Update Account Information with the account,
+                the withdrawal amount, and "WITHDRAWAL".
+                Display "Withdrawal successful."
+                Display the new balance.
+            END IF
+        END IF
+    END IF
+END
+
+
+Transfer Money
+START
+    Ask for the sender account number.
+    Find the sender account.
+    IF the sender account does not exist THEN
+        Display "Sender account not found."
+    ELSE
+        Ask for the recipient account number.
+        Find the recipient account.
+        IF the recipient account does not exist THEN
+            Display "Recipient account not found."
+        ELSE IF the sender account number equals the recipient
+        account number THEN
+            Display "Cannot transfer to the same account."
+        ELSE
+            Ask for the transfer amount and the current time.
+            IF transfer amount is less than or equal to 0 THEN
+                Display "Transfer amount must be greater than 0."
+            ELSE
+                Call Check Transaction Rules with the sender account,
+                the transfer amount, "TRANSFER", and the current time.
+
+                Record this attempt in the sender's history, along
+                with whether it passed or failed.
+
+                IF the result is not "PASS" THEN
+                    Display the result.
+                ELSE
+                    Subtract the transfer amount from the sender's
+                    balance.
+                    Add the transfer amount to the recipient's
+                    balance.
+                    Call Update Account Information with the sender
+                    account, the transfer amount, and "TRANSFER".
+                    Display "Transfer successful."
+                    Display the new sender balance.
+                END IF
+            END IF
+        END IF
+    END IF
+END
